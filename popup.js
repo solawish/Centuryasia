@@ -803,5 +803,148 @@ bookBtn.addEventListener("click", async () => {
   }
 });
 
+// 取得電影列表 HTML
+async function fetchMovieListHtml() {
+  try {
+    const url = "https://ticket.centuryasia.com.tw/ximen/index.aspx";
+    const response = await fetch(url, {
+      method: "GET",
+      credentials: "include",
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP 錯誤: ${response.status}`);
+    }
+
+    const html = await response.text();
+    return html;
+  } catch (error) {
+    updateApiStatus(`取得電影列表 HTML 失敗: ${error.message}`, true);
+    throw error;
+  }
+}
+
+// 解析電影資料
+function parseMovieData(html) {
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, "text/html");
+    
+    // 取得兩個 ul 元素
+    const ul1 = doc.getElementById("detail_pagedetail_ulinser2");
+    const ul2 = doc.getElementById("detail_pagedetail_ulinser1");
+    
+    if (!ul1 && !ul2) {
+      throw new Error("找不到目標 ul 元素（detail_pagedetail_ulinser2 或 detail_pagedetail_ulinser1）");
+    }
+
+    const movies = [];
+    const seenProgramIds = new Set();
+
+    // 解析函數
+    const parseLiElement = (li) => {
+      try {
+        // 取得電影名稱：從 div.trn_text > div.trn_mn > span
+        const trnText = li.querySelector("div.trn_text");
+        if (!trnText) return null;
+        
+        const trnMn = trnText.querySelector("div.trn_mn");
+        if (!trnMn) return null;
+        
+        const span = trnMn.querySelector("span");
+        if (!span) return null;
+        
+        const movieName = span.textContent.trim();
+        if (!movieName) return null;
+
+        // 取得 ProgramID：從 a 元素的 href 屬性中解析
+        const link = li.querySelector("a.trn_img") || li.querySelector("a");
+        if (!link || !link.getAttribute("href")) return null;
+        
+        // 取得 href 屬性值（可能是相對路徑）
+        const hrefAttr = link.getAttribute("href");
+        
+        // 使用 base URL 解析相對路徑
+        const baseUrl = "https://ticket.centuryasia.com.tw/ximen/";
+        const url = new URL(hrefAttr, baseUrl);
+        const programId = url.searchParams.get("ProgramID");
+        if (!programId) return null;
+
+        return { movieName, programId };
+      } catch (error) {
+        return null;
+      }
+    };
+
+    // 解析第一個 ul
+    if (ul1) {
+      const lis = ul1.querySelectorAll("li");
+      lis.forEach((li) => {
+        const movie = parseLiElement(li);
+        if (movie && !seenProgramIds.has(movie.programId)) {
+          movies.push(movie);
+          seenProgramIds.add(movie.programId);
+        }
+      });
+    }
+
+    // 解析第二個 ul
+    if (ul2) {
+      const lis = ul2.querySelectorAll("li");
+      lis.forEach((li) => {
+        const movie = parseLiElement(li);
+        if (movie && !seenProgramIds.has(movie.programId)) {
+          movies.push(movie);
+          seenProgramIds.add(movie.programId);
+        }
+      });
+    }
+
+    return movies;
+  } catch (error) {
+    updateApiStatus(`解析電影資料失敗: ${error.message}`, true);
+    throw error;
+  }
+}
+
+// 載入電影選項
+async function loadMovieOptions() {
+  try {
+    updateApiStatus("正在載入電影列表...");
+    movieSelect.disabled = true;
+    movieSelect.innerHTML = '<option value="">載入中...</option>';
+
+    // 取得 HTML
+    const html = await fetchMovieListHtml();
+    
+    // 解析電影資料
+    const movies = parseMovieData(html);
+
+    if (movies.length === 0) {
+      movieSelect.innerHTML = '<option value="">無可用電影</option>';
+      movieSelect.disabled = false;
+      updateApiStatus("未找到可用電影", true);
+      return;
+    }
+
+    // 更新下拉選單
+    movieSelect.innerHTML = '<option value="">請選擇電影</option>';
+    movies.forEach((movie) => {
+      const option = document.createElement("option");
+      option.value = movie.programId;
+      option.textContent = movie.movieName;
+      movieSelect.appendChild(option);
+    });
+
+    movieSelect.disabled = false;
+    updateApiStatus(`成功載入 ${movies.length} 部電影`);
+  } catch (error) {
+    movieSelect.innerHTML = '<option value="">載入失敗</option>';
+    movieSelect.disabled = false;
+    updateApiStatus(`載入電影選項失敗: ${error.message}`, true);
+  }
+}
+
 // 初始化
 updateApiStatus("系統已就緒");
+loadMovieOptions();
