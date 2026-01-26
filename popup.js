@@ -546,6 +546,48 @@ async function selectTicketType(tabId, ticketTypes, quantity) {
   }
 }
 
+// 點擊確認按鈕
+async function clickConfirmButton(tabId) {
+  try {
+    const result = await chrome.scripting.executeScript({
+      target: { tabId: tabId },
+      func: () => {
+        // 先嘗試使用 id 定位
+        let confirmButton = document.getElementById("detail_imgcursor");
+        
+        // 如果找不到，嘗試使用 name 屬性定位
+        if (!confirmButton) {
+          confirmButton = document.querySelector('input[name="ctl00$detail$imgcursor"]');
+        }
+        
+        if (!confirmButton) {
+          return { success: false, error: "無法找到確認按鈕" };
+        }
+        
+        // 點擊確認按鈕
+        confirmButton.click();
+        
+        return { success: true };
+      },
+    });
+
+    if (!result || !result[0] || !result[0].result) {
+      throw new Error("執行確認按鈕點擊腳本失敗");
+    }
+
+    const clickResult = result[0].result;
+    
+    if (!clickResult.success) {
+      throw new Error(clickResult.error || "無法點擊確認按鈕");
+    }
+
+    updateApiStatus("已點擊確認按鈕");
+  } catch (error) {
+    updateApiStatus(`點擊確認按鈕失敗: ${error.message}`, true);
+    throw error;
+  }
+}
+
 // 訂票按鈕事件
 bookBtn.addEventListener("click", async () => {
   const movieValue = movieSelect.value;
@@ -630,8 +672,13 @@ bookBtn.addEventListener("click", async () => {
       quantityValue
     );
     updateApiStatus(
-      `訂票成功！已選擇票種: ${selectedTicket.name} (${selectedTicket.price} 元) x ${quantityValue} 張`
+      `已選擇票種: ${selectedTicket.name} (${selectedTicket.price} 元) x ${quantityValue} 張`
     );
+
+    // 11. 點擊確認按鈕
+    updateApiStatus("正在點擊確認按鈕...");
+    await clickConfirmButton(currentTab.id);
+    updateApiStatus("訂票成功！已點擊確認按鈕");
   } catch (error) {
     updateApiStatus(`訂票失敗: ${error.message}`, true);
   }
