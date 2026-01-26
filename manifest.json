@@ -3,7 +3,7 @@
   "name": "喜樂影城訂票助手",
   "version": "1.0.0",
   "description": "協助使用者訂閱喜樂影城的電影票",
-  "permissions": ["cookies", "tabs"],
+  "permissions": ["cookies", "tabs", "scripting"],
   "host_permissions": [
     "https://ticket.centuryasia.com.tw/*"
   ],
