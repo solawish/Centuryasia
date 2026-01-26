@@ -9,7 +9,7 @@ const apiStatus = document.getElementById("api-status");
 
 // API 基礎 URL
 const API_BASE_URL =
-  "https://ticket.centuryasia.com.tw/ximen/movie_timetable.aspx";
+  "https://ticket.centuryasia.com.tw/ximen/ImportOldMovieWeb/ajax/Program_ShowMovieTime.ashx";
 
 // 更新 API 狀態顯示
 function updateApiStatus(message, isError = false) {
@@ -37,52 +37,60 @@ async function getSessionCookie() {
   }
 }
 
-// 發送 GET 請求獲取時間資料
+// 發送 POST 請求獲取時間資料
 async function fetchTimeData(programId) {
   try {
     // 驗證 cookie 是否存在
     await getSessionCookie();
-    const url = `${API_BASE_URL}?ProgramID=${programId}`;
+
+    // 構建 POST 請求參數（寫死）
+    const params = new URLSearchParams();
+    params.append("ProgramID", "0004304");
+    params.append("Date", "2026-02-07");
+    params.append("CodeControl", "");
 
     // Chrome Extension 會自動帶入該網域的 cookie
-    const response = await fetch(url, {
-      method: "GET",
+    const response = await fetch(API_BASE_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
       credentials: "include",
+      body: params.toString(),
     });
 
     if (!response.ok) {
       throw new Error(`HTTP 錯誤: ${response.status}`);
     }
 
-    const html = await response.text();
-    return html;
+    const json = await response.json();
+    return json;
   } catch (error) {
     updateApiStatus(`取得時間資料失敗: ${error.message}`, true);
     throw error;
   }
 }
 
-// 解析 Panel1 元素並提取時間選項
-function parseTimeOptions(html) {
+// 解析 JSON 回應並提取時間選項
+function parseTimeOptions(jsonData) {
   try {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(html, "text/html");
-    const panel1 = doc.getElementById("Panel1");
-
-    if (!panel1) {
-      throw new Error("找不到 Panel1 元素");
+    if (!Array.isArray(jsonData)) {
+      throw new Error("API 回應格式錯誤：預期為陣列");
     }
 
     const timeOptions = [];
-    const timeLinks = panel1.querySelectorAll(
-      "li.movie_timetable_times a"
-    );
 
-    timeLinks.forEach((link) => {
-      const text = link.textContent.trim();
-      const value = link.getAttribute("href");
-      if (text && value) {
-        timeOptions.push({ text, value });
+    // 遍歷回應陣列中的每個項目
+    jsonData.forEach((item) => {
+      // 從每個項目的 mytime 陣列中提取所有場次
+      if (item.mytime && Array.isArray(item.mytime)) {
+        item.mytime.forEach((timeItem) => {
+          const text = timeItem.RealShowTime;
+          const value = timeItem.Url;
+          if (text && value) {
+            timeOptions.push({ text, value });
+          }
+        });
       }
     });
 
@@ -101,8 +109,8 @@ async function loadTimeOptions(programId) {
     refreshTimeBtn.disabled = true;
     timeSelect.innerHTML = '<option value="">載入中...</option>';
 
-    const html = await fetchTimeData(programId);
-    const options = parseTimeOptions(html);
+    const jsonData = await fetchTimeData(programId);
+    const options = parseTimeOptions(jsonData);
 
     if (options.length === 0) {
       timeSelect.innerHTML = '<option value="">無可用時間</option>';
