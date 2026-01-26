@@ -37,16 +37,33 @@ async function getSessionCookie() {
   }
 }
 
+// 生成今天起未來14天的日期陣列（格式：YYYY-MM-DD）
+function generateDateRange() {
+  const dates = [];
+  const today = new Date();
+  
+  for (let i = 0; i < 14; i++) {
+    const date = new Date(today);
+    date.setDate(today.getDate() + i);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    dates.push(`${year}-${month}-${day}`);
+  }
+  
+  return dates;
+}
+
 // 發送 POST 請求獲取時間資料
-async function fetchTimeData(programId) {
+async function fetchTimeData(programId, date) {
   try {
     // 驗證 cookie 是否存在
     await getSessionCookie();
 
-    // 構建 POST 請求參數（寫死）
+    // 構建 POST 請求參數（動態參數）
     const params = new URLSearchParams();
-    params.append("ProgramID", "0004304");
-    params.append("Date", "2026-02-07");
+    params.append("ProgramID", programId);
+    params.append("Date", date);
     params.append("CodeControl", "");
 
     // Chrome Extension 會自動帶入該網域的 cookie
@@ -66,7 +83,7 @@ async function fetchTimeData(programId) {
     const json = await response.json();
     return json;
   } catch (error) {
-    updateApiStatus(`取得時間資料失敗: ${error.message}`, true);
+    updateApiStatus(`取得時間資料失敗 (${date}): ${error.message}`, true);
     throw error;
   }
 }
@@ -101,6 +118,46 @@ function parseTimeOptions(jsonData) {
   }
 }
 
+// 將時間字串轉換為 Date 物件以便排序（格式：2026/01/27 17:15）
+function parseTimeString(timeString) {
+  try {
+    // 將 "2026/01/27 17:15" 轉換為 Date 物件
+    const [datePart, timePart] = timeString.split(" ");
+    const [year, month, day] = datePart.split("/").map(Number);
+    const [hour, minute] = timePart.split(":").map(Number);
+    return new Date(year, month - 1, day, hour, minute);
+  } catch (error) {
+    // 如果解析失敗，返回一個很遠的未來日期，讓它排在最後
+    return new Date(9999, 0, 1);
+  }
+}
+
+// 按照時間先後順序排序場次時間選項（時間越早的越靠前）
+function sortTimeOptions(timeOptions) {
+  return timeOptions.sort((a, b) => {
+    const dateA = parseTimeString(a.text);
+    const dateB = parseTimeString(b.text);
+    return dateA - dateB;
+  });
+}
+
+// 去除重複的時間選項（基於 value 或 text）
+function removeDuplicateTimeOptions(timeOptions) {
+  const seen = new Set();
+  const unique = [];
+  
+  for (const option of timeOptions) {
+    // 使用 value 作為唯一識別（因為 URL 應該是唯一的）
+    const key = option.value;
+    if (!seen.has(key)) {
+      seen.add(key);
+      unique.push(option);
+    }
+  }
+  
+  return unique;
+}
+
 // 載入時間選項
 async function loadTimeOptions(programId) {
   try {
@@ -109,17 +166,59 @@ async function loadTimeOptions(programId) {
     refreshTimeBtn.disabled = true;
     timeSelect.innerHTML = '<option value="">載入中...</option>';
 
-    const jsonData = await fetchTimeData(programId);
-    const options = parseTimeOptions(jsonData);
+    // 生成今天起未來14天的日期陣列
+    const dates = generateDateRange();
+    updateApiStatus(`正在查詢 ${dates.length} 天的場次時間...`);
 
-    if (options.length === 0) {
+    // 為每個日期並行發送 API 請求
+    const fetchPromises = dates.map(async (date) => {
+      try {
+        const jsonData = await fetchTimeData(programId, date);
+        const options = parseTimeOptions(jsonData);
+        return { success: true, date, options };
+      } catch (error) {
+        return { success: false, date, error };
+      }
+    });
+
+    // 等待所有請求完成（使用 Promise.allSettled 確保即使部分失敗也能繼續）
+    const results = await Promise.allSettled(fetchPromises);
+
+    // 處理結果
+    const allTimeOptions = [];
+    const failedDates = [];
+    let successCount = 0;
+
+    results.forEach((result) => {
+      if (result.status === "fulfilled") {
+        const { success, date, options, error } = result.value;
+        if (success) {
+          allTimeOptions.push(...options);
+          successCount++;
+        } else {
+          failedDates.push(date);
+        }
+      } else {
+        // Promise.allSettled 理論上不會進入這裡，但為了安全起見
+        updateApiStatus(`請求處理異常: ${result.reason}`, true);
+      }
+    });
+
+    // 去除重複項目
+    const uniqueOptions = removeDuplicateTimeOptions(allTimeOptions);
+
+    // 按照時間先後順序排序
+    const sortedOptions = sortTimeOptions(uniqueOptions);
+
+    // 顯示結果
+    if (sortedOptions.length === 0) {
       timeSelect.innerHTML = '<option value="">無可用時間</option>';
       timeSelect.disabled = true;
-      refreshTimeBtn.disabled = false; // 即使找不到時間，仍可重新整理
+      refreshTimeBtn.disabled = false;
       updateApiStatus("未找到可用時間", true);
     } else {
       timeSelect.innerHTML = '<option value="">請選擇時間</option>';
-      options.forEach((option) => {
+      sortedOptions.forEach((option) => {
         const optionElement = document.createElement("option");
         optionElement.value = option.value;
         optionElement.textContent = option.text;
@@ -127,12 +226,24 @@ async function loadTimeOptions(programId) {
       });
       timeSelect.disabled = false;
       refreshTimeBtn.disabled = false;
-      updateApiStatus(`成功載入 ${options.length} 個時間選項`);
+      
+      // 顯示載入統計
+      let statusMessage = `成功載入 ${sortedOptions.length} 個時間選項（${successCount}/${dates.length} 天成功）`;
+      if (failedDates.length > 0) {
+        statusMessage += `，${failedDates.length} 天載入失敗`;
+      }
+      updateApiStatus(statusMessage);
+    }
+
+    // 如果有失敗的日期，顯示錯誤訊息
+    if (failedDates.length > 0) {
+      updateApiStatus(`以下日期載入失敗: ${failedDates.join(", ")}`, true);
     }
   } catch (error) {
     timeSelect.innerHTML = '<option value="">載入失敗</option>';
     timeSelect.disabled = true;
-    refreshTimeBtn.disabled = false; // 即使載入失敗，仍可重新整理
+    refreshTimeBtn.disabled = false;
+    updateApiStatus(`載入時間選項失敗: ${error.message}`, true);
   }
 }
 
