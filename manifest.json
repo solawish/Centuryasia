@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "喜樂影城訂票助手",
+  "version": "1.0.0",
+  "description": "協助使用者訂閱喜樂影城的電影票",
+  "permissions": ["cookies", "tabs"],
+  "host_permissions": [
+    "https://ticket.centuryasia.com.tw/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "喜樂影城訂票"
+  }
+}

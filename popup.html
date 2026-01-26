@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>喜樂影城訂票</title>
+    <style>
+      body {
+        width: 350px;
+        padding: 16px;
+        font-family: "Microsoft JhengHei", "微軟正黑體", Arial, sans-serif;
+        font-size: 14px;
+        margin: 0;
+      }
+
+      .form-group {
+        margin-bottom: 16px;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 6px;
+        font-weight: 500;
+        color: #333;
+      }
+
+      select,
+      button {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 14px;
+        font-family: inherit;
+      }
+
+      select:disabled {
+        background-color: #f5f5f5;
+        cursor: not-allowed;
+      }
+
+      button {
+        background-color: #007bff;
+        color: white;
+        border: none;
+        cursor: pointer;
+        font-weight: 500;
+        margin-top: 8px;
+      }
+
+      button:hover {
+        background-color: #0056b3;
+      }
+
+      button:disabled {
+        background-color: #ccc;
+        cursor: not-allowed;
+      }
+
+      .refresh-btn {
+        background-color: #6c757d;
+        margin-top: 0;
+        margin-bottom: 8px;
+        width: auto;
+        min-width: 80px;
+        padding: 6px 12px;
+        font-size: 12px;
+      }
+
+      .refresh-btn:hover {
+        background-color: #5a6268;
+      }
+
+      .book-btn {
+        background-color: #28a745;
+        margin-top: 16px;
+      }
+
+      .book-btn:hover {
+        background-color: #218838;
+      }
+
+      textarea {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 12px;
+        font-family: "Courier New", monospace;
+        resize: vertical;
+        min-height: 80px;
+        margin-top: 8px;
+      }
+
+      .time-group {
+        display: flex;
+        gap: 8px;
+        align-items: flex-start;
+      }
+
+      .time-group select {
+        flex: 1;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>喜樂影城訂票</h2>
+
+    <div class="form-group">
+      <label for="movie-select">電影</label>
+      <select id="movie-select">
+        <option value="">請選擇電影</option>
+        <option value="0004304">佐賀偶像是傳奇 夢幻銀河樂園(特別場)</option>
+        <option value="0004290">美好的世界獻上祝福！紅傳說</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="time-select">時間</label>
+      <div class="time-group">
+        <select id="time-select" disabled>
+          <option value="">請先選擇電影</option>
+        </select>
+        <button id="refresh-time-btn" class="refresh-btn" disabled>
+          重新整理
+        </button>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="ticket-type-select">票種</label>
+      <select id="ticket-type-select">
+        <option value="999">999(超。盲目猜測)</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="quantity-select">數量</label>
+      <select id="quantity-select">
+        <option value="1">1</option>
+        <option value="2">2</option>
+        <option value="3">3</option>
+        <option value="4">4</option>
+      </select>
+    </div>
+
+    <button id="book-btn" class="book-btn">訂票</button>
+
+    <div class="form-group">
+      <label for="api-status">API 狀態</label>
+      <textarea id="api-status" readonly></textarea>
+    </div>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
