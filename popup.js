@@ -1,4 +1,5 @@
 // 取得 DOM 元素
+const cinemaSelect = document.getElementById("cinema-select");
 const movieSelect = document.getElementById("movie-select");
 const timeSelect = document.getElementById("time-select");
 const refreshTimeBtn = document.getElementById("refresh-time-btn");
@@ -7,9 +8,22 @@ const quantitySelect = document.getElementById("quantity-select");
 const bookBtn = document.getElementById("book-btn");
 const apiStatus = document.getElementById("api-status");
 
-// API 基礎 URL
-const API_BASE_URL =
-  "https://ticket.centuryasia.com.tw/ximen/ImportOldMovieWeb/ajax/Program_ShowMovieTime.ashx";
+const TICKET_BASE_DOMAIN = "https://ticket.centuryasia.com.tw";
+
+// 取得當前影城 value
+function getCinemaValue() {
+  return cinemaSelect ? cinemaSelect.value : "ximen";
+}
+
+// 取得當前影城 base URL（含結尾斜線）
+function getCinemaBaseUrl() {
+  return `${TICKET_BASE_DOMAIN}/${getCinemaValue()}/`;
+}
+
+// 取得場次時間 API URL
+function getShowTimeApiUrl() {
+  return `${TICKET_BASE_DOMAIN}/${getCinemaValue()}/ImportOldMovieWeb/ajax/Program_ShowMovieTime.ashx`;
+}
 
 // 更新 API 狀態顯示
 function updateApiStatus(message, isError = false) {
@@ -67,7 +81,7 @@ async function fetchTimeData(programId, date) {
     params.append("CodeControl", "");
 
     // Chrome Extension 會自動帶入該網域的 cookie
-    const response = await fetch(API_BASE_URL, {
+    const response = await fetch(getShowTimeApiUrl(), {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
@@ -267,11 +281,19 @@ refreshTimeBtn.addEventListener("click", () => {
   }
 });
 
+// 影城選擇變更事件：清空時間並重新載入電影列表
+cinemaSelect.addEventListener("change", () => {
+  timeSelect.innerHTML = '<option value="">請先選擇電影</option>';
+  timeSelect.disabled = true;
+  refreshTimeBtn.disabled = true;
+  loadMovieOptions();
+});
+
 // 解析 URL 參數
 function parseUrlParams(url) {
   const params = {};
   try {
-    const urlObj = new URL(url, "https://ticket.centuryasia.com.tw");
+    const urlObj = new URL(url, getCinemaBaseUrl());
     urlObj.searchParams.forEach((value, key) => {
       params[key] = value;
     });
@@ -294,7 +316,7 @@ function parseUrlParams(url) {
 async function loadSeatSelectionPage(timeValue) {
   try {
     await getSessionCookie();
-    const baseUrl = "https://ticket.centuryasia.com.tw/ximen/";
+    const baseUrl = getCinemaBaseUrl();
     const url = timeValue.startsWith("http")
       ? timeValue
       : timeValue.startsWith("/")
@@ -436,7 +458,7 @@ function selectSeats(seats, quantity) {
 // 構建訂票頁面 URL
 function buildBookingUrl(timeValue, selectedSeats) {
   const params = parseUrlParams(timeValue);
-  const baseUrl = "https://ticket.centuryasia.com.tw/ximen/buyticket_process-2.aspx";
+  const baseUrl = `${getCinemaBaseUrl()}buyticket_process-2.aspx`;
 
   // 構建 seatinfo 參數
   const seatinfo = selectedSeats
@@ -806,7 +828,7 @@ bookBtn.addEventListener("click", async () => {
 // 取得電影列表 HTML
 async function fetchMovieListHtml() {
   try {
-    const url = "https://ticket.centuryasia.com.tw/ximen/index.aspx";
+    const url = `${getCinemaBaseUrl()}index.aspx`;
     const response = await fetch(url, {
       method: "GET",
       credentials: "include",
@@ -865,7 +887,7 @@ function parseMovieData(html) {
         const hrefAttr = link.getAttribute("href");
         
         // 使用 base URL 解析相對路徑
-        const baseUrl = "https://ticket.centuryasia.com.tw/ximen/";
+        const baseUrl = getCinemaBaseUrl();
         const url = new URL(hrefAttr, baseUrl);
         const programId = url.searchParams.get("ProgramID");
         if (!programId) return null;

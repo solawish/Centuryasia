@@ -1,8 +1,28 @@
-# popup-interface Specification
+## ADDED Requirements
 
-## Purpose
-TBD - created by archiving change add-popup-interface. Update Purpose after archive.
-## Requirements
+### Requirement: 影城選擇功能
+系統 SHALL 在 popup 介面最上方提供影城下拉選單，允許使用者選擇影城。所有與喜樂影城網站相關的 API 與頁面 URL 皆須使用所選影城的 value 作為路徑片段（即 `https://ticket.centuryasia.com.tw/{影城value}/...`）。
+
+#### Scenario: 顯示影城選單與選項
+- **WHEN** 使用者開啟 popup 介面
+- **THEN** 系統在介面最上方（標題下方、電影選單上方）顯示「影城」表單區塊
+- **AND** 影城下拉選單包含以下選項（text-value）：
+  - 今日影城-ximen
+  - 南港影城-nangang
+  - 永和比漾-beyond
+  - 桃園A19-taoyuan
+  - 高雄總圖-Kaohsiung
+- **AND** 預設選項為「今日影城」(value 為 ximen)
+- **AND** 使用者可從下拉選單中選擇任一影城
+
+#### Scenario: API 與頁面使用所選影城
+- **WHEN** 使用者已選擇影城（影城下拉選單的 value 不為空）
+- **AND** 系統發送電影列表、場次時間或訂票相關請求
+- **THEN** 系統使用影城下拉選單的 value 作為 URL 路徑片段
+- **AND** 所有請求的 base 為 `https://ticket.centuryasia.com.tw/{影城value}/`
+
+## MODIFIED Requirements
+
 ### Requirement: 電影選擇功能
 系統 SHALL 提供電影選擇下拉選單，允許使用者選擇想要觀看的電影。電影選項需從喜樂影城官方網站動態解析取得。系統 SHALL 使用當前選擇的影城 value 組出請求 URL。
 
@@ -42,14 +62,6 @@ TBD - created by archiving change add-popup-interface. Update Purpose after arch
 - **THEN** 電影下拉選單顯示 "載入中..." 選項
 - **AND** 電影下拉選單處於禁用狀態
 - **AND** 系統在 API 狀態顯示區域顯示載入狀態訊息
-
-### Requirement: Cookie 管理功能
-系統 SHALL 在發送 API 請求時帶入該站台的 cookie。系統需從瀏覽器 cookie 中取得 `ASP.NET_SessionId` 的值，並在請求時將其包含在 Cookie header 中。
-
-#### Scenario: 取得並使用 ASP.NET_SessionId cookie
-- **WHEN** 系統需要發送 API 請求至喜樂影城網站
-- **THEN** 系統從瀏覽器 cookie 中取得 key 為 "ASP.NET_SessionId" 的值
-- **AND** 系統在請求的 Cookie header 中包含 `ASP.NET_SessionId={取得的值}`
 
 ### Requirement: 時間選擇功能
 系統 SHALL 提供時間選擇下拉選單，允許使用者選擇場次時間。時間選擇功能必須在選擇電影後才能啟用。時間資料來源為 POST 請求 `https://ticket.centuryasia.com.tw/{影城value}/ImportOldMovieWeb/ajax/Program_ShowMovieTime.ashx`，使用 `application/x-www-form-urlencoded` 格式，系統需解析 JSON 回應，提取場次時間選項。請求時需帶入 ASP.NET_SessionId cookie。系統需使用當前選擇的影城 value 組出請求 URL。系統需為今天起未來14天的每個日期發送 API 請求，並合併所有日期的場次時間選項。
@@ -105,60 +117,3 @@ TBD - created by archiving change add-popup-interface. Update Purpose after arch
 - **AND** 系統合併所有日期的場次時間選項，去除重複項目
 - **AND** 系統按照時間先後順序排序場次時間選項（時間越早的越靠前，比較靠近現在的要在上面）
 - **AND** 系統更新時間選擇下拉選單為排序後的最新場次時間選項
-
-### Requirement: 票種選擇功能
-系統 SHALL 提供票種選擇下拉選單，允許使用者選擇票種。票種選項為寫死的固定值。
-
-#### Scenario: 使用者選擇票種
-- **WHEN** 使用者開啟 popup 介面
-- **THEN** 系統顯示票種選擇下拉選單
-- **AND** 下拉選單包含一個選項：text 為 "999(超。盲目猜測)"，value 為 "999"
-- **AND** 使用者可以從下拉選單中選擇該票種
-
-### Requirement: 數量選擇功能
-系統 SHALL 提供數量選擇下拉選單，允許使用者選擇票數。數量選項為寫死的固定值 1~4。
-
-#### Scenario: 使用者選擇數量
-- **WHEN** 使用者開啟 popup 介面
-- **THEN** 系統顯示數量選擇下拉選單
-- **AND** 下拉選單包含四個選項：1、2、3、4
-- **AND** 使用者可以從下拉選單中選擇票數（1~4）
-
-### Requirement: 訂票按鈕功能
-系統 SHALL 在 popup.html 最下面提供訂票按鈕，允許使用者執行訂票動作。
-
-#### Scenario: 顯示訂票按鈕
-- **WHEN** 使用者開啟 popup 介面
-- **THEN** 系統在介面最下面顯示訂票按鈕
-- **AND** 使用者可以點擊訂票按鈕執行訂票動作
-
-### Requirement: API 狀態顯示功能
-系統 SHALL 提供一個 textarea 元素，用於顯示呼叫 API 的成功與否狀態。
-
-#### Scenario: 顯示 API 呼叫狀態
-- **WHEN** 系統呼叫 API（如載入時間選項或執行訂票）
-- **THEN** 系統在 textarea 中顯示 API 呼叫的狀態訊息
-- **AND** 成功時顯示成功訊息
-- **AND** 失敗時顯示錯誤訊息
-
-### Requirement: 影城選擇功能
-系統 SHALL 在 popup 介面最上方提供影城下拉選單，允許使用者選擇影城。所有與喜樂影城網站相關的 API 與頁面 URL 皆須使用所選影城的 value 作為路徑片段（即 `https://ticket.centuryasia.com.tw/{影城value}/...`）。
-
-#### Scenario: 顯示影城選單與選項
-- **WHEN** 使用者開啟 popup 介面
-- **THEN** 系統在介面最上方（標題下方、電影選單上方）顯示「影城」表單區塊
-- **AND** 影城下拉選單包含以下選項（text-value）：
-  - 今日影城-ximen
-  - 南港影城-nangang
-  - 永和比漾-beyond
-  - 桃園A19-taoyuan
-  - 高雄總圖-Kaohsiung
-- **AND** 預設選項為「今日影城」(value 為 ximen)
-- **AND** 使用者可從下拉選單中選擇任一影城
-
-#### Scenario: API 與頁面使用所選影城
-- **WHEN** 使用者已選擇影城（影城下拉選單的 value 不為空）
-- **AND** 系統發送電影列表、場次時間或訂票相關請求
-- **THEN** 系統使用影城下拉選單的 value 作為 URL 路徑片段
-- **AND** 所有請求的 base 為 `https://ticket.centuryasia.com.tw/{影城value}/`
-
