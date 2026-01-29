@@ -3,7 +3,7 @@ const cinemaSelect = document.getElementById("cinema-select");
 const movieSelect = document.getElementById("movie-select");
 const timeSelect = document.getElementById("time-select");
 const refreshTimeBtn = document.getElementById("refresh-time-btn");
-const ticketTypeSelect = document.getElementById("ticket-type-select");
+const ticketTypeInput = document.getElementById("ticket-type-select");
 const quantitySelect = document.getElementById("quantity-select");
 const bookBtn = document.getElementById("book-btn");
 const apiStatus = document.getElementById("api-status");
@@ -541,23 +541,15 @@ async function parseTicketTypes(tabId) {
           ".bps_content_tickettypes_numberofsheets"
         );
 
+        // 以 DOM 順序（forEach index）作為票種索引，確保選到的票種與操作的列一致
         ticketElements.forEach((element, index) => {
           const label = element.querySelector("label.bctn_t");
           const priceInput = element.querySelector('input[id^="price"]');
           const ticketName = label ? label.textContent.trim() : "";
           const price = priceInput ? priceInput.value : "";
-          
-          // 從 price input 的 id 中提取索引（例如：price0 -> 0）
-          let ticketIndex = index;
-          if (priceInput && priceInput.id) {
-            const match = priceInput.id.match(/price(\d+)/);
-            if (match) {
-              ticketIndex = parseInt(match[1]);
-            }
-          }
 
           ticketTypes.push({
-            index: ticketIndex,
+            index: index,
             name: ticketName,
             price: price,
             searchKey: `${ticketName} & ${price}`,
@@ -580,22 +572,40 @@ async function parseTicketTypes(tabId) {
   }
 }
 
-// 選擇票種並操作 DOM
-async function selectTicketType(tabId, ticketTypes, quantity) {
+// 選擇票種並操作 DOM（先排除愛心/敬老 → 關鍵字 → 全票 → 單人套票 → 第一個）
+async function selectTicketType(tabId, ticketTypes, quantity, ticketTypeKeyword) {
   try {
+    // 最前面：先排除名稱含有「愛心」或「敬老」的票種
+    const eligible = ticketTypes.filter(
+      (t) =>
+        t.name &&
+        !t.name.includes("愛心") &&
+        !t.name.includes("敬老")
+    );
+
+    const keyword = (ticketTypeKeyword || "").trim();
     let selectedTicket = null;
 
-    // 優先尋找 value 999 的票種
-    selectedTicket = ticketTypes.find((t) => t.price === "999");
-
-    // 若沒有就選擇「全票」
-    if (!selectedTicket) {
-      selectedTicket = ticketTypes.find((t) => t.name === "全票");
+    // 若有關鍵字，優先尋找名稱含有該關鍵字的票種（取第一個符合者）
+    if (keyword) {
+      selectedTicket = eligible.find(
+        (t) => t.name && t.name.includes(keyword)
+      );
     }
 
-    // 再沒有就選擇第一個
-    if (!selectedTicket && ticketTypes.length > 0) {
-      selectedTicket = ticketTypes[0];
+    // 若無輸入或無符合者：依序尋找名稱含「全票」→「單人套票」→ 第一個
+    if (!selectedTicket) {
+      selectedTicket = eligible.find(
+        (t) => t.name && t.name.includes("全票")
+      );
+    }
+    if (!selectedTicket) {
+      selectedTicket = eligible.find(
+        (t) => t.name && t.name.includes("單人套票")
+      );
+    }
+    if (!selectedTicket && eligible.length > 0) {
+      selectedTicket = eligible[0];
     }
 
     if (!selectedTicket) {
@@ -632,48 +642,63 @@ async function selectTicketType(tabId, ticketTypes, quantity) {
           throw new Error(`找不到 bctn_i 元素 (索引: ${index})`);
         }
 
-        // 直接調用 quantityadd 函數，而不是執行 javascript: URL
-        // 這樣可以避免 CSP 限制
-        // 嘗試多種方式找到並調用函數
-        let quantityaddFunc = null;
-        
-        // 方式1: 從 window 物件尋找
-        if (typeof window.quantityadd === 'function') {
-          quantityaddFunc = window.quantityadd;
+        // 優先：在 bctn_i 內找到包含 quantityadd(索引) 的連結並點擊（符合規格，避免 CSP）
+        const quantityaddStr = "quantityadd(" + index + ")";
+        const links = bctnI.querySelectorAll("a, button");
+        let addLink = null;
+        for (const el of links) {
+          const href = (el.getAttribute && el.getAttribute("href")) || "";
+          const onclick = (el.getAttribute && el.getAttribute("onclick")) || "";
+          if ((href + onclick).indexOf(quantityaddStr) !== -1) {
+            addLink = el;
+            break;
+          }
         }
-        // 方式2: 從全域範圍尋找（某些網站可能這樣定義）
-        else if (typeof quantityadd === 'function') {
-          quantityaddFunc = quantityadd;
-        }
-        
-        if (quantityaddFunc) {
-          // 根據票數調用函數多次
+
+        if (addLink) {
           for (let i = 0; i < count; i++) {
-            quantityaddFunc(index);
+            addLink.click();
           }
         } else {
-          // 如果找不到函數，直接操作 DOM 來更新數量
-          // 這是最安全的方式，完全避免 CSP 限制
-          const numberLabel = bctnI.querySelector(`label#number${index}`);
-          const numberInput = bctnI.querySelector(`input#txtnum${index}`);
-          
-          if (numberLabel && numberInput) {
-            const currentValue = parseInt(numberLabel.textContent || numberInput.value || 0);
-            const newValue = currentValue + count;
-            
-            // 更新顯示的值
-            numberLabel.textContent = newValue;
-            numberInput.value = newValue;
-            
-            // 觸發 input 事件，讓頁面知道值已改變
-            const inputEvent = new Event('input', { bubbles: true });
-            numberInput.dispatchEvent(inputEvent);
-            
-            // 觸發 change 事件
-            const changeEvent = new Event('change', { bubbles: true });
-            numberInput.dispatchEvent(changeEvent);
+          // 備援：直接調用 quantityadd（若頁面有暴露為全域）
+          let quantityaddFunc =
+            typeof window.quantityadd === "function"
+              ? window.quantityadd
+              : typeof quantityadd === "function"
+                ? quantityadd
+                : null;
+          if (quantityaddFunc) {
+            for (let i = 0; i < count; i++) {
+              quantityaddFunc(index);
+            }
           } else {
-            throw new Error(`找不到數量控制元素 (索引: ${index})`);
+            // 最後：直接改寫數量 DOM（label#number{N}、input#txtnum{N} 或依 name 尋找）
+            let numberLabel = bctnI.querySelector("label#number" + index);
+            let numberInput = bctnI.querySelector("input#txtnum" + index);
+            if (!numberLabel || !numberInput) {
+              numberInput =
+                bctnI.querySelector(
+                  'input[name*="txtnum"], input[id*="txtnum"]'
+                ) || bctnI.querySelector("input[type='text']");
+              numberLabel =
+                bctnI.querySelector("label[for='txtnum" + index + "']") ||
+                bctnI.querySelector("label");
+            }
+            if (numberLabel && numberInput) {
+              const currentValue = parseInt(
+                numberLabel.textContent || numberInput.value || 0,
+                10
+              );
+              const newValue = currentValue + count;
+              numberLabel.textContent = newValue;
+              numberInput.value = String(newValue);
+              numberInput.dispatchEvent(new Event("input", { bubbles: true }));
+              numberInput.dispatchEvent(new Event("change", { bubbles: true }));
+            } else {
+              throw new Error(
+                `找不到數量控制元素 (索引: ${index})，且 bctn_i 內無 quantityadd 連結`
+              );
+            }
           }
         }
       },
@@ -733,7 +758,7 @@ async function clickConfirmButton(tabId) {
 bookBtn.addEventListener("click", async () => {
   const movieValue = movieSelect.value;
   const timeValue = timeSelect.value;
-  const ticketTypeValue = ticketTypeSelect.value;
+  const ticketTypeKeyword = ticketTypeInput ? ticketTypeInput.value.trim() : "";
   const quantityValue = parseInt(quantitySelect.value);
 
   // 驗證時間選單已選擇
@@ -810,7 +835,8 @@ bookBtn.addEventListener("click", async () => {
     const selectedTicket = await selectTicketType(
       currentTab.id,
       ticketTypes,
-      quantityValue
+      quantityValue,
+      ticketTypeKeyword
     );
     updateApiStatus(
       `已選擇票種: ${selectedTicket.name} (${selectedTicket.price} 元) x ${quantityValue} 張`
