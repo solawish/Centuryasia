@@ -10,6 +10,53 @@ const apiStatus = document.getElementById("api-status");
 
 const TICKET_BASE_DOMAIN = "https://ticket.centuryasia.com.tw";
 
+// Popup 表單狀態持久化
+const STORAGE_KEY = "popupFormState";
+const DEFAULT_FORM_STATE = {
+  cinema: "ximen",
+  movieProgramId: "",
+  timeValue: "",
+  ticketTypeKeyword: "",
+  quantity: "1",
+};
+
+// 讀取目前表單狀態（影城、電影、時間、票種、數量）
+function getFormState() {
+  return {
+    cinema: cinemaSelect ? cinemaSelect.value : DEFAULT_FORM_STATE.cinema,
+    movieProgramId: movieSelect ? movieSelect.value : "",
+    timeValue: timeSelect ? timeSelect.value : "",
+    ticketTypeKeyword: ticketTypeInput ? ticketTypeInput.value.trim() : "",
+    quantity: quantitySelect ? quantitySelect.value : DEFAULT_FORM_STATE.quantity,
+  };
+}
+
+// 寫入目前表單狀態至 chrome.storage.local
+function saveFormState() {
+  if (!chrome.storage?.local) return;
+  try {
+    const state = getFormState();
+    chrome.storage.local.set({ [STORAGE_KEY]: state });
+  } catch (e) {
+    console.warn("popup saveFormState:", e);
+  }
+}
+
+// 從 chrome.storage.local 讀取上次儲存狀態
+function readSavedState() {
+  if (!chrome.storage?.local) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    try {
+      chrome.storage.local.get([STORAGE_KEY], (result) => {
+        resolve(result[STORAGE_KEY] || null);
+      });
+    } catch (e) {
+      console.warn("popup readSavedState:", e);
+      resolve(null);
+    }
+  });
+}
+
 // 取得當前影城 value
 function getCinemaValue() {
   return cinemaSelect ? cinemaSelect.value : "ximen";
@@ -271,6 +318,7 @@ movieSelect.addEventListener("change", (e) => {
     timeSelect.disabled = true;
     refreshTimeBtn.disabled = true;
   }
+  saveFormState();
 });
 
 // 時間重新整理按鈕事件
@@ -287,7 +335,12 @@ cinemaSelect.addEventListener("change", () => {
   timeSelect.disabled = true;
   refreshTimeBtn.disabled = true;
   loadMovieOptions();
+  saveFormState();
 });
+
+timeSelect.addEventListener("change", saveFormState);
+quantitySelect.addEventListener("change", saveFormState);
+ticketTypeInput.addEventListener("input", saveFormState);
 
 // 解析 URL 參數
 function parseUrlParams(url) {
@@ -993,6 +1046,51 @@ async function loadMovieOptions() {
   }
 }
 
-// 初始化
-updateApiStatus("系統已就緒");
-loadMovieOptions();
+// 初始化：讀取儲存狀態、還原欄位、載入電影與時間
+async function init() {
+  updateApiStatus("系統已就緒");
+  const savedState = await readSavedState();
+
+  if (savedState) {
+    if (savedState.ticketTypeKeyword != null) {
+      ticketTypeInput.value = savedState.ticketTypeKeyword;
+    }
+    if (
+      savedState.quantity &&
+      ["1", "2", "3", "4"].includes(savedState.quantity)
+    ) {
+      quantitySelect.value = savedState.quantity;
+    }
+    if (savedState.cinema && cinemaSelect.value !== savedState.cinema) {
+      cinemaSelect.value = savedState.cinema;
+    }
+  }
+
+  await loadMovieOptions();
+
+  if (savedState?.movieProgramId) {
+    const hasMovie = [...movieSelect.options].some(
+      (o) => o.value === savedState.movieProgramId
+    );
+    if (hasMovie) {
+      movieSelect.value = savedState.movieProgramId;
+      await loadTimeOptions(savedState.movieProgramId);
+      if (savedState.timeValue) {
+        const hasTime = [...timeSelect.options].some(
+          (o) => o.value === savedState.timeValue
+        );
+        if (hasTime) {
+          timeSelect.value = savedState.timeValue;
+        }
+      }
+    }
+  }
+}
+
+// 關閉 popup 前再寫入一次，避免非同步 set 未完成就被關閉
+window.addEventListener("pagehide", saveFormState);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") saveFormState();
+});
+
+init();
